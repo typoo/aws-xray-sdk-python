@@ -226,8 +226,10 @@ class AWSXRayRecorder(object):
         # if segment is already close, we check if we can send entire segment
         # otherwise we check if we need to stream some subsegments
         if self.current_segment().ready_to_send():
+            print('send_segment')
             self._send_segment()
         else:
+            print('stream_segment')
             self.stream_subsegments()
 
     def get_trace_entity(self):
