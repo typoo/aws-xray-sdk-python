@@ -17,7 +17,6 @@ from aws_xray_sdk.ext.util import (
 class XRayHandler(tornado.web.RequestHandler):
     def prepare(self, *args, **kwargs):
         request = self.request
-        print(request.headers)
 
         xray_header = construct_xray_header(request.headers)
 
@@ -38,10 +37,6 @@ class XRayHandler(tornado.web.RequestHandler):
             parent_id=xray_header.parent,
             sampling=sampling_decision,
         )
-
-        #subsegment = Subsegment(self._xray_segment.name, 'remote', self._xray_segment)
-        #self._xray_segment.add_subsegment(subsegment)
-        #xray_recorder.set_trace_entity(subsegment)
 
     def on_finish(self, *args, **kwargs):
         request = self.request

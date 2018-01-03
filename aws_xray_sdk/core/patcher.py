@@ -7,6 +7,7 @@ SUPPORTED_MODULES = (
     'aiobotocore',
     'aiohttp.client',
     'aiomysql',
+    'psycopg2',
     'botocore',
     'pynamodb',
     'requests',

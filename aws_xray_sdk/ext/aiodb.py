@@ -22,14 +22,15 @@ class XRayTracedAsyncConn(wrapt.ObjectProxy):
                 super(XRayTracedCursor, self).__init__(*args, **kwargs)
 
                 # we preset database type if db is framework built-in
-                if not self._xray_meta.get('database_type'):
-                    db_type = super().__class__.__module__.split('.')[0]
-                    self._xray_meta['database_type'] = db_type
+                #if not self._xray_meta.get('database_type'):
+                #    db_type = super().__class__.__module__.split('.')[0]
+                #    self._xray_meta['database_type'] = db_type
 
             @xray_recorder.capture_async()
             @asyncio.coroutine
             def execute(self, query, *args, **kwargs):
 
+                self._xray_meta['sanitized_query'] = query
                 add_sql_meta(self._xray_meta)
                 result = yield from super().execute(query, *args, **kwargs)
                 return result
@@ -38,6 +39,7 @@ class XRayTracedAsyncConn(wrapt.ObjectProxy):
             @asyncio.coroutine
             def executemany(self, query, *args, **kwargs):
 
+                self._xray_meta['sanitized_query'] = query
                 add_sql_meta(self._xray_meta)
                 result = yield from super().executemany(query, *args, **kwargs)
                 return result
@@ -46,6 +48,7 @@ class XRayTracedAsyncConn(wrapt.ObjectProxy):
             @asyncio.coroutine
             def callproc(self, proc, args):
 
+                self._xray_meta['sanitized_query'] = query
                 add_sql_meta(self._xray_meta)
                 result = yield from super().callproc(proc, args)
                 return result
@@ -56,12 +59,9 @@ class XRayTracedAsyncConn(wrapt.ObjectProxy):
 
 def add_sql_meta(meta):
 
-    print(meta)
-
     subsegment = xray_recorder.current_subsegment()
 
     if not subsegment:
-        print('no subsegment')
         return
 
     if meta.get('name', None):
