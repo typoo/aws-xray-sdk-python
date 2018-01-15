@@ -29,25 +29,28 @@ class XRayTracedCursor(wrapt.ObjectProxy):
         self._xray_meta = meta
 
         # we preset database type if db is framework built-in
-        if not self._xray_meta.get('database_type'):
-            db_type = cursor.__class__.__module__.split('.')[0]
-            self._xray_meta['database_type'] = db_type
+        #if not self._xray_meta.get('database_type'):
+        #    db_type = cursor.__class__.__module__.split('.')[0]
+        #    self._xray_meta['database_type'] = db_type
 
     @xray_recorder.capture()
     def execute(self, query, *args, **kwargs):
 
+        self._xray_meta['sanitized_query'] = query
         add_sql_meta(self._xray_meta)
         return self.__wrapped__.execute(query, *args, **kwargs)
 
     @xray_recorder.capture()
     def executemany(self, query, *args, **kwargs):
 
+        self._xray_meta['sanitized_query'] = query
         add_sql_meta(self._xray_meta)
         return self.__wrapped__.executemany(query, *args, **kwargs)
 
     @xray_recorder.capture()
     def callproc(self, proc, args):
 
+        self._xray_meta['sanitized_query'] = query
         add_sql_meta(self._xray_meta)
         return self.__wrapped__.callproc(proc, args)
 

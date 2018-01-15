@@ -5,6 +5,9 @@ log = logging.getLogger(__name__)
 
 SUPPORTED_MODULES = (
     'aiobotocore',
+    'aiohttp.client',
+    'aiomysql',
+    'psycopg2',
     'botocore',
     'pynamodb',
     'requests',
@@ -32,6 +35,10 @@ def patch(modules_to_patch, raise_errors=True):
         elif module_to_patch == 'pynamodb':
             modules.add('botocore')
             modules.add(module_to_patch)
+        elif module_to_patch == 'aiohttp.client':
+            modules.add('aiohttp.client')
+        elif module_to_patch == 'aiomysql':
+            modules.add('aiomysql')
         else:
             modules.add(module_to_patch)
     unsupported_modules = modules - set(SUPPORTED_MODULES)
