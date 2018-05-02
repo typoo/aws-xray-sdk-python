@@ -1,6 +1,7 @@
 # coding: utf8
 import logging
 import traceback
+import functools
 
 import tornado
 
@@ -14,8 +15,26 @@ from aws_xray_sdk.ext.util import (
 )
 
 
+def patch_handler(handler):
+    for method in ('get', 'post', 'put', 'delete', 'options'):
+        func = getattr(handler, method)
+        if func:
+            setattr(handler, method, hooked(func))
+
+
+def hooked(func):
+    @functools.wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        self.hook_before()
+        result = await func(self, *args, **kwargs)
+        self.hook_after()
+        return result
+
+    return wrapper
+
+
 class XRayHandler(tornado.web.RequestHandler):
-    def prepare(self, *args, **kwargs):
+    def hook_before(self, *args, **kwargs):
         request = self.request
 
         xray_header = construct_xray_header(request.headers)
@@ -57,7 +76,7 @@ class XRayHandler(tornado.web.RequestHandler):
         elif remote_ip:
             segment.put_http_meta(http.CLIENT_IP, remote_ip)
 
-    def on_finish(self, *args, **kwargs):
+    def hook_after(self, *args, **kwargs):
         segment = xray_recorder.current_segment()
 
         segment.put_http_meta(http.STATUS, self._status_code)
