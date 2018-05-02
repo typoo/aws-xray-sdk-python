@@ -23,6 +23,7 @@ def patch():
 def _xray_traced_requests(wrapped, instance, args, kwargs):
 
     url = kwargs.get('url') or args[1]
+    url = url.split('?')[0]
 
     return xray_recorder.record_subsegment(
         wrapped, instance, args, kwargs,

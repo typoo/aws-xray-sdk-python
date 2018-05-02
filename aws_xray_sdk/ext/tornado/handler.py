@@ -1,6 +1,8 @@
 # coding: utf8
 import logging
 import traceback
+import functools
+import asyncio
 
 import tornado
 
@@ -14,8 +16,35 @@ from aws_xray_sdk.ext.util import (
 )
 
 
+def as_asyncio_task(func):
+    @functools.wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        coro = func(self, *args, **kwargs)
+        return await asyncio.ensure_future(coro)
+    return wrapper
+
+
+def patch_handler(handler):
+    for method in map(str.lower, handler.SUPPORTED_METHODS):
+        func = getattr(handler, method)
+        if func:
+            setattr(handler, method, hooked(func))
+
+
+def hooked(func):
+    @as_asyncio_task
+    @functools.wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        await self.hook_before()
+        result = await func(self, *args, **kwargs)
+        await self.hook_after()
+        return result
+
+    return wrapper
+
+
 class XRayHandler(tornado.web.RequestHandler):
-    def prepare(self, *args, **kwargs):
+    async def hook_before(self, *args, **kwargs):
         request = self.request
 
         xray_header = construct_xray_header(request.headers)
@@ -31,19 +60,15 @@ class XRayHandler(tornado.web.RequestHandler):
             path=request.path,
         )
 
-        self._xray_segment = xray_recorder.begin_segment(
+        segment = xray_recorder.begin_segment(
             name=name,
             traceid=xray_header.root,
             parent_id=xray_header.parent,
             sampling=sampling_decision,
         )
 
-    def on_finish(self, *args, **kwargs):
-        request = self.request
-
-        segment = self._xray_segment
-
-        segment.put_http_meta(http.URL, request.uri)
+        segment.put_http_meta(http.URL, request.path)
+        segment.put_annotation('query', request.query)
         segment.put_http_meta(http.METHOD, request.method)
 
         user_agent = request.headers.get('User-Agent')
@@ -61,6 +86,9 @@ class XRayHandler(tornado.web.RequestHandler):
         elif remote_ip:
             segment.put_http_meta(http.CLIENT_IP, remote_ip)
 
+    async def hook_after(self, *args, **kwargs):
+        segment = xray_recorder.current_segment()
+
         segment.put_http_meta(http.STATUS, self._status_code)
 
         content_length = self._headers.get('Content-Length')
@@ -75,4 +103,3 @@ class XRayHandler(tornado.web.RequestHandler):
         segment.put_http_meta(http.STATUS, 500)
         stack = traceback.extract_stack(limit=xray_recorder._max_trace_back)
         segment.add_exception(err, stack)
-        xray_recorder.end_segment()
