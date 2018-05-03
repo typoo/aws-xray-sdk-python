@@ -2,7 +2,6 @@
 import logging
 import traceback
 import functools
-import asyncio
 
 import tornado
 
@@ -16,35 +15,20 @@ from aws_xray_sdk.ext.util import (
 )
 
 
-def as_asyncio_task(func):
-    @functools.wraps(func)
-    async def wrapper(self, *args, **kwargs):
-        coro = func(self, *args, **kwargs)
-        return await asyncio.ensure_future(coro)
-    return wrapper
+class DummyXRayHandler(tornado.web.RequestHandler):
+    """ Dummy Handler"""
+    def _xray_hook_before(self, *args, **kwargs):
+        pass
 
+    def _xray_hook_after(self, *args, **kwargs):
+        pass
 
-def patch_handler(handler):
-    for method in map(str.lower, handler.SUPPORTED_METHODS):
-        func = getattr(handler, method)
-        if func:
-            setattr(handler, method, hooked(func))
-
-
-def hooked(func):
-    @as_asyncio_task
-    @functools.wraps(func)
-    async def wrapper(self, *args, **kwargs):
-        await self.hook_before()
-        result = await func(self, *args, **kwargs)
-        await self.hook_after()
-        return result
-
-    return wrapper
+    def raise_exception_to_xray(self, exc):
+        pass
 
 
 class XRayHandler(tornado.web.RequestHandler):
-    async def hook_before(self, *args, **kwargs):
+    def _xray_hook_before(self, *args, **kwargs):
         request = self.request
 
         xray_header = construct_xray_header(request.headers)
@@ -86,7 +70,7 @@ class XRayHandler(tornado.web.RequestHandler):
         elif remote_ip:
             segment.put_http_meta(http.CLIENT_IP, remote_ip)
 
-    async def hook_after(self, *args, **kwargs):
+    def _xray_hook_after(self, *args, **kwargs):
         segment = xray_recorder.current_segment()
 
         segment.put_http_meta(http.STATUS, self._status_code)
@@ -103,3 +87,12 @@ class XRayHandler(tornado.web.RequestHandler):
         segment.put_http_meta(http.STATUS, 500)
         stack = traceback.extract_stack(limit=xray_recorder._max_trace_back)
         segment.add_exception(err, stack)
+
+
+class SyncXRayHandler(XRayHandler):
+    """ 同步版本"""
+    def prepare(self, *args, **kwargs):
+        return self._xray_hook_before(*args,**kwargs)
+
+    def on_finish(self, *args, **kwargs):
+        return self._xray_hook_after(*args,**kwargs)
